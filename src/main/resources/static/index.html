@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSE — уведомления в реальном времени</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #172033; background: #f3f6fb; }
+    body { margin: 0; }
+    main { width: min(760px, calc(100% - 32px)); margin: 40px auto; }
+    header, form, .status, .notification { padding: 20px; border-radius: 14px; background: white; box-shadow: 0 5px 20px #12234412; }
+    header { color: white; background: #172554; }
+    h1 { margin: 0 0 8px; }
+    form { margin: 18px 0; display: flex; gap: 10px; }
+    input { flex: 1; min-width: 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+    button { padding: 12px 18px; border: 0; border-radius: 8px; background: #2563eb; color: white; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .status { margin: 14px 0; color: #475569; }
+    .connected { color: #15803d; }
+    .disconnected { color: #b91c1c; }
+    #notifications { display: grid; gap: 10px; }
+    .notification p { margin: 0 0 8px; overflow-wrap: anywhere; }
+    time { color: #64748b; font-size: .85rem; }
+    .empty { color: #64748b; }
+    @media (max-width: 520px) { form { flex-direction: column; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>SSE: уведомления в реальном времени</h1>
+    <p>Открой эту страницу в нескольких вкладках и отправь уведомление — оно появится во всех подключённых клиентах.</p>
+  </header>
+  <section class="status" aria-live="polite">Соединение: <strong id="connection" class="disconnected">подключаемся…</strong> · активных клиентов: <span id="clients">0</span></section>
+  <form id="notification-form">
+    <input id="message" name="message" maxlength="300" placeholder="Текст уведомления" required>
+    <button id="send" type="submit">Отправить</button>
+  </form>
+  <section id="notifications" aria-live="polite"><p class="empty">Уведомлений пока нет.</p></section>
+</main>
+<script>
+  const connectionLabel = document.getElementById('connection');
+  const list = document.getElementById('notifications');
+  const clientsLabel = document.getElementById('clients');
+  const escapeHtml = (value) => {
+    const node = document.createElement('span');
+    node.textContent = value;
+    return node.innerHTML;
+  };
+
+  function addNotification(event) {
+    const item = JSON.parse(event.data);
+    list.querySelector('.empty')?.remove();
+    const article = document.createElement('article');
+    article.className = 'notification';
+    article.innerHTML = `<p>${escapeHtml(item.message)}</p><time>${new Date(item.createdAt).toLocaleString('ru-RU')}</time>`;
+    list.prepend(article);
+  }
+
+  const source = new EventSource('/api/events');
+  source.addEventListener('open', () => {
+    connectionLabel.textContent = 'подключено';
+    connectionLabel.className = 'connected';
+  });
+  source.addEventListener('connected', () => {
+    connectionLabel.textContent = 'подключено';
+    connectionLabel.className = 'connected';
+  });
+  source.addEventListener('notification', addNotification);
+  source.addEventListener('error', () => {
+    connectionLabel.textContent = 'переподключение…';
+    connectionLabel.className = 'disconnected';
+  });
+
+  document.getElementById('notification-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('message');
+    const button = document.getElementById('send');
+    const message = input.value.trim();
+    if (!message) return;
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      input.value = '';
+    } catch (error) {
+      alert(`Не удалось отправить уведомление: ${error.message}`);
+    } finally {
+      button.disabled = false;
+      input.focus();
+    }
+  });
+
+  async function refreshStatus() {
+    try {
+      const response = await fetch('/api/status');
+      const status = await response.json();
+      clientsLabel.textContent = status.connectedClients;
+    } catch { /* статус обновится при следующем опросе */ }
+  }
+  refreshStatus();
+  setInterval(refreshStatus, 2000);
+</script>
+</body>
+</html>

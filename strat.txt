@@ -1,0 +1,37 @@
+Учебный проект: сервер рассылает уведомления браузерам через SSE (Server-Sent Events).
+
+Состав:
+- Java 17 + Spring Boot 3.4.3, сборка Gradle Kotlin DSL (`build.gradle.kts`).
+- `NotificationController` — SSE endpoint `GET /api/events`, POST `POST /api/notifications`, API истории и статуса.
+- `NotificationService` — хранит до 50 уведомлений и активные подключения в памяти; использует `SseEmitter`.
+- `src/main/resources/static/index.html` — простая HTML/JavaScript страница с `EventSource`; отдельного frontend нет.
+- Данные живут только до перезапуска приложения; БД не используется.
+
+Запуск (JDK 17+ и Gradle 8.x), из корня:
+
+```bash
+gradle bootRun
+```
+
+Открой http://localhost:8080 в одной или нескольких вкладках. Отправь уведомление: оно появится у всех подключённых клиентов.
+
+API:
+- `GET http://localhost:8080/api/events` — поток SSE.
+- `POST http://localhost:8080/api/notifications` — публикация JSON `{"message":"Привет"}`.
+- `GET http://localhost:8080/api/notifications` — последние события.
+- `GET http://localhost:8080/api/status` — число подключений.
+
+Тесты:
+
+```bash
+gradle test
+```
+
+Проверка из терминала:
+
+```bash
+curl -N http://localhost:8080/api/events
+curl -X POST http://localhost:8080/api/notifications -H 'Content-Type: application/json' -d '{"message":"Тест"}'
+```
+
+SSE — однонаправленный поток от сервера к клиенту. Браузер автоматически переподключается; публикация события выполняется отдельным POST.
